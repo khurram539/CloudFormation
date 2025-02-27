@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'EC2 instance with EIP configuration'
+
+Resources:
+
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0b88848780d62be43
+      InstanceType: m5.xlarge
+      KeyName: Khurram-key
+      AvailabilityZone: us-east-1a
+      DisableApiTermination: false
+      Monitoring: true
+      EbsOptimized: true
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: subnet-08d90b90e9b121c7e
+          GroupSet: 
+            - sg-025028548d0e7a3d0
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1  # Root device for Amazon Linux 2
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          # Update package list and upgrade all packages
+          sudo apt update
+          sudo apt upgrade -y
+          sudo apt dist-upgrade -y
+
+          # Remove old kernels and unnecessary files
+          sudo apt autoremove -y
+          sudo apt-get clean
+
+          # Install pip if not already installed
+          sudo apt install python3-pip -y
+
+          # List and update pip packages
+          pip list --outdated
+          sleep 3
+
+          # Generate list of outdated packages
+          pip list --outdated --format=columns 
+
+          # Update each package
+          for pkg in $(pip list --outdated --format=columns | awk 'NR>2 {print $1}')
+          do
+              pip install --upgrade $pkg
+          done
+
+          # Final check
+          pip list --outdated
+          sleep 3
+
+          # Final system update
+          sudo apt update
+      Tags:
+        - Key: Name
+          Value: ubuntu Desktop
+        - Key: Application
+          Value: Webull
+
+  InstanceEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: ubuntu-desktop-eip
+
+  EIPAssociation:
+    Type: 'AWS::EC2::EIPAssociation'
+    Properties:
+      EIP: !Ref InstanceEIP
+      InstanceId: !Ref EC2Instance
+
+Outputs:
+  ElasticIP:
+    Description: 'Public IP address of the EC2 instance'
+    Value: !Ref InstanceEIP
